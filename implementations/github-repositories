@@ -1,1 +1,9 @@
+| #     | GitHub implementation                                                                         | What it implements                  | Relevance |
+| ----- | --------------------------------------------------------------------------------------------- | ----------------------------------- | --------- |
+| **1** | [Lost in the Middle](https://github.com/nelson-liu/lost-in-the-middle?utm_source=chatgpt.com) | Positional/context degradation      | ⭐⭐⭐⭐⭐     |
+| **2** | [LLMLingua / LongLLMLingua](https://github.com/microsoft/LLMLingua?utm_source=chatgpt.com)    | Prompt compression + reordering     | ⭐⭐⭐⭐⭐     |
+| **3** | [RULER](https://github.com/NVIDIA/RULER?utm_source=chatgpt.com)                               | Effective context-length evaluation | ⭐⭐⭐⭐⭐     |
+| **4** | [LongRoPE](https://github.com/microsoft/LongRoPE?utm_source=chatgpt.com)                      | Context-window extension            | ⭐⭐⭐⭐      |
+| **5** | [LongBench](https://github.com/THUDM/LongBench?utm_source=chatgpt.com)                        | Long-context benchmark              | ⭐⭐⭐⭐⭐     |
+| **6** | [LooGLE](https://github.com/bigai-nlco/LooGLE?utm_source=chatgpt.com)                         | Long-range dependency evaluation    | ⭐⭐⭐⭐⭐     |
 
