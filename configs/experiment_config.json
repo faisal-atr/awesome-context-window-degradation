@@ -1,0 +1,35 @@
+{
+  "dataset_name": "ScholarCWD-Bench",
+  "description": "Controlled multi-document scholarly synthesis benchmark evaluating context-window degradation",
+  "total_tasks": 100,
+  "context_lengths_tokens": [
+    2048,
+    4096,
+    8192,
+    16384,
+    32768
+  ],
+  "evidence_positions": [
+    "beginning (0-10%)",
+    "early (25%)",
+    "middle (50%)",
+    "late (75%)",
+    "end (90-100%)"
+  ],
+  "num_documents_per_task": [
+    5,
+    10,
+    20,
+    40,
+    80
+  ],
+  "injected_contradictions_ratio": 0.3,
+  "injected_caveats_ratio": 0.45,
+  "seeds": [
+    42,
+    123,
+    456,
+    789,
+    1024
+  ]
+}
