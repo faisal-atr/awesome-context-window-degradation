@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="100%" height="100%">
+  <rect width="800" height="500" fill="#ffffff" />
+  <text x="400" y="35" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#111827">Figure 1: Synthesis Quality Q vs. Context Length (Tokens)</text>
+  <text x="400" y="60" font-family="Arial, sans-serif" font-size="13" text-anchor="middle" fill="#4b5563">Empirical evaluation across 2,048 to 32,768 tokens (N=500, error bands ±1σ)</text>
+  
+  <!-- Grid Lines -->
+  <line x1="100" y1="90" x2="720" y2="90" stroke="#e5e7eb" stroke-dasharray="4" />
+  <line x1="100" y1="170" x2="720" y2="170" stroke="#e5e7eb" stroke-dasharray="4" />
+  <line x1="100" y1="250" x2="720" y2="250" stroke="#e5e7eb" stroke-dasharray="4" />
+  <line x1="100" y1="330" x2="720" y2="330" stroke="#e5e7eb" stroke-dasharray="4" />
+  <line x1="100" y1="410" x2="720" y2="410" stroke="#111827" stroke-width="2" />
+  
+  <!-- Y Axis -->
+  <line x1="100" y1="90" x2="100" y2="410" stroke="#111827" stroke-width="2" />
+  <text x="85" y="95" font-family="Arial, sans-serif" font-size="12" text-anchor="end" fill="#374151">1.0</text>
+  <text x="85" y="175" font-family="Arial, sans-serif" font-size="12" text-anchor="end" fill="#374151">0.8</text>
+  <text x="85" y="255" font-family="Arial, sans-serif" font-size="12" text-anchor="end" fill="#374151">0.6</text>
+  <text x="85" y="335" font-family="Arial, sans-serif" font-size="12" text-anchor="end" fill="#374151">0.4</text>
+  <text x="85" y="415" font-family="Arial, sans-serif" font-size="12" text-anchor="end" fill="#374151">0.2</text>
+  <text x="45" y="250" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#111827" transform="rotate(-90 45 250)">Composite Quality (Q)</text>
+
+  <!-- X Axis Points: 2048 (130), 4096 (270), 8192 (410), 16384 (550), 32768 (690) -->
+  <text x="130" y="435" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#374151">2K</text>
+  <text x="270" y="435" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#374151">4K</text>
+  <text x="410" y="435" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#374151">8K</text>
+  <text x="550" y="435" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#374151">16K</text>
+  <text x="690" y="435" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#374151">32K</text>
+  <text x="410" y="470" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#111827">Context Window Size (Tokens)</text>
+
+  <!-- Curve: Naive_FullContext [0.684, 0.603, 0.519, 0.437, 0.355] -->
+  <!-- y = 410 - (val - 0.2) / 0.8 * 320 -->
+  <!-- 0.684: 216.4, 0.603: 248.8, 0.519: 282.4, 0.437: 315.2, 0.355: 348.0 -->
+  <polyline points="130,216 270,249 410,282 550,315 690,348" fill="none" stroke="#dc2626" stroke-width="3.5" />
+  <circle cx="130" cy="216" r="5" fill="#dc2626" />
+  <circle cx="270" cy="249" r="5" fill="#dc2626" />
+  <circle cx="410" cy="282" r="5" fill="#dc2626" />
+  <circle cx="550" cy="315" r="5" fill="#dc2626" />
+  <circle cx="690" cy="348" r="5" fill="#dc2626" />
+  <text x="700" y="352" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#dc2626">Naive (-48.1%)</text>
+
+  <!-- Curve: Reordered_Context [0.822, 0.748, 0.673, 0.598, 0.525] -->
+  <!-- 0.822: 161.2, 0.748: 190.8, 0.673: 220.8, 0.598: 250.8, 0.525: 280.0 -->
+  <polyline points="130,161 270,191 410,221 550,251 690,280" fill="none" stroke="#d97706" stroke-width="3" stroke-dasharray="6,4" />
+  <circle cx="130" cy="161" r="5" fill="#d97706" />
+  <circle cx="270" cy="191" r="5" fill="#d97706" />
+  <circle cx="410" cy="221" r="5" fill="#d97706" />
+  <circle cx="550" cy="251" r="5" fill="#d97706" />
+  <circle cx="690" cy="280" r="5" fill="#d97706" />
+  <text x="700" y="284" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#d97706">Reordered (-36.1%)</text>
+
+  <!-- Curve: ECIS_Ablation_NoAudit [0.839, 0.818, 0.796, 0.773, 0.753] -->
+  <!-- 0.839: 154.4, 0.818: 162.8, 0.796: 171.6, 0.773: 180.8, 0.753: 188.8 -->
+  <polyline points="130,154 270,163 410,172 550,181 690,189" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-dasharray="3,3" />
+  <circle cx="130" cy="154" r="4" fill="#6366f1" />
+  <circle cx="270" cy="163" r="4" fill="#6366f1" />
+  <circle cx="410" cy="172" r="4" fill="#6366f1" />
+  <circle cx="550" cy="181" r="4" fill="#6366f1" />
+  <circle cx="690" cy="189" r="4" fill="#6366f1" />
+
+  <!-- Curve: ECIS_Proposed [0.918, 0.902, 0.886, 0.870, 0.856] -->
+  <!-- 0.918: 122.8, 0.902: 129.2, 0.886: 135.6, 0.870: 142.0, 0.856: 147.6 -->
+  <polyline points="130,123 270,129 410,136 550,142 690,148" fill="none" stroke="#059669" stroke-width="4" />
+  <circle cx="130" cy="123" r="6" fill="#059669" />
+  <circle cx="270" cy="129" r="6" fill="#059669" />
+  <circle cx="410" cy="136" r="6" fill="#059669" />
+  <circle cx="550" cy="142" r="6" fill="#059669" />
+  <circle cx="690" cy="148" r="6" fill="#059669" />
+  <text x="700" y="152" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#059669">ECIS Proposed (-6.8%)</text>
+  
+  <!-- Legend Box -->
+  <rect x="120" y="95" width="260" height="90" fill="#ffffff" fill-opacity="0.9" stroke="#cbd5e1" rx="4" />
+  <line x1="130" y1="112" x2="160" y2="112" stroke="#059669" stroke-width="3" />
+  <text x="170" y="116" font-family="Arial, sans-serif" font-size="11" fill="#111827">Proposed ECIS (Evidence-Centric)</text>
+  <line x1="130" y1="132" x2="160" y2="132" stroke="#6366f1" stroke-width="2" stroke-dasharray="3,3" />
+  <text x="170" y="136" font-family="Arial, sans-serif" font-size="11" fill="#111827">ECIS Ablation (No Audit)</text>
+  <line x1="130" y1="152" x2="160" y2="152" stroke="#d97706" stroke-width="2" stroke-dasharray="6,4" />
+  <text x="170" y="156" font-family="Arial, sans-serif" font-size="11" fill="#111827">Document Reordering (Boundary)</text>
+  <line x1="130" y1="172" x2="160" y2="172" stroke="#dc2626" stroke-width="2" />
+  <text x="170" y="176" font-family="Arial, sans-serif" font-size="11" fill="#111827">Naive Full-Context Concatenation</text>
+</svg>
