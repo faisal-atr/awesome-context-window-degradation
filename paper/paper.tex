@@ -186,7 +186,7 @@ Naive ingestion drops by 48.1\% as context expands from 2K to 32K tokens, direct
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{fig1_context_scaling}
+  \includegraphics[width=\textwidth]{fig1_context_scaling.png}
   \caption{Synthesis quality $Q$ vs.\ context length for all four methods across 500 controlled runs (error bars = $\pm$1 SD). Naive full-context ingestion degrades by 48.1\% from 4K to 128K tokens, while the proposed ECIS limits degradation to 6.8\%.}
   \label{fig:scaling}
 \end{figure*}
@@ -216,7 +216,7 @@ The classic U-shaped ``lost in the middle'' curve~\cite{r10} ($-$44.2\% dip for 
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{fig2_lost_in_the_middle}
+  \includegraphics[width=\textwidth]{fig2_lost_in_the_middle.png}
   \caption{Lost-in-the-middle positional quality factor as evidence shifts from first to last document position. Naive ingestion shows the classic U-shaped curve ($-$44.2\% at centre). ECIS variants achieve a near-flat positional profile ($\Delta{=}0.2\%$), confirming positional invariance.}
   \label{fig:position}
 \end{figure*}
@@ -247,7 +247,7 @@ As shown in Table~\ref{tab:ablation}, ablation of the audit module drops $I$ by 
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{fig3_ablation_metrics}
+  \includegraphics[width=\textwidth]{fig3_ablation_metrics.png}
   \caption{Per-dimension quality breakdown (Accuracy, Coherence, Provenance, Integration, Uncertainty Calibration) across all four methods. Removing the contradiction and provenance audit steps (ECIS No Audit) causes a 21.2\% collapse in cross-source integration ($I$) and a 24.8\% drop in uncertainty calibration ($U$), while accuracy ($A$) is barely affected ($-$3.2\%).}
   \label{fig:ablation}
 \end{figure*}
