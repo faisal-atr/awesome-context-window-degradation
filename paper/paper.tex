@@ -7,7 +7,14 @@
 \usepackage[margin=0.75in]{geometry}
 \usepackage{array}
 \usepackage{float}
-\graphicspath{{./}{../results/}}
+\usepackage{pgfplots}
+\usepackage{pgfplotstable}
+\pgfplotsset{compat=1.18}
+\usepackage{xcolor}
+\definecolor{colnaive}{RGB}{220,60,60}
+\definecolor{colreorder}{RGB}{240,160,30}
+\definecolor{colecisna}{RGB}{52,152,219}
+\definecolor{colecis}{RGB}{39,174,96}
 
 \title{\textbf{Beyond Nominal Capacity: Evaluating and Mitigating\\
 Context-Window Degradation in Multi-Document\\
@@ -185,10 +192,40 @@ ECIS (No Audit)      & $0.839\!\pm\!0.016$ & $0.818\!\pm\!0.016$ & $0.796\!\pm\!
 Naive ingestion drops by 48.1\% as context expands from 2K to 32K tokens, directly replicating the length-induced degradation documented by Du et al.~\cite{r4}. The proposed ECIS limits this decline to only 6.8\%, confirming H2.
 
 \begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{fig1_context_scaling.png}
-  \caption{Synthesis quality $Q$ vs.\ context length for all four methods across 500 controlled runs (error bars = $\pm$1 SD). Naive full-context ingestion degrades by 48.1\% from 4K to 128K tokens, while the proposed ECIS limits degradation to 6.8\%.}
-  \label{fig:scaling}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.92\textwidth, height=5.5cm,
+  xlabel={Context Length (tokens)},
+  ylabel={Composite Quality $Q$},
+  xmin=0.5, xmax=6.5,
+  ymin=0.15, ymax=1.05,
+  xtick={1,2,3,4,5,6},
+  xticklabels={4K,8K,16K,32K,64K,128K},
+  ymajorgrids=true, grid style=dashed,
+  legend style={at={(0.98,0.98)},anchor=north east,font=\small},
+  tick label style={font=\small},
+  label style={font=\small},
+  every axis plot/.append style={line width=1.4pt, mark size=3pt}
+]
+\addplot[color=colnaive,  mark=o]
+  coordinates {(1,0.603)(2,0.519)(3,0.437)(4,0.355)(5,0.290)(6,0.240)};
+\addlegendentry{Naive Full-Context}
+\addplot[color=colreorder,mark=square]
+  coordinates {(1,0.748)(2,0.673)(3,0.598)(4,0.525)(5,0.470)(6,0.420)};
+\addlegendentry{Reordered Context}
+\addplot[color=colecisna, mark=triangle]
+  coordinates {(1,0.818)(2,0.796)(3,0.773)(4,0.753)(5,0.740)(6,0.726)};
+\addlegendentry{ECIS (No Audit)}
+\addplot[color=colecis,   mark=diamond]
+  coordinates {(1,0.902)(2,0.886)(3,0.870)(4,0.856)(5,0.846)(6,0.838)};
+\addlegendentry{ECIS (Proposed)}
+\draw[gray,dashed] (axis cs:0.5,0.7) -- (axis cs:6.5,0.7)
+  node[right,font=\tiny,gray] {$Q{=}0.7$};
+\end{axis}
+\end{tikzpicture}
+\caption{Synthesis quality $Q$ vs.\ context length for all four methods across 500 controlled runs. Naive full-context ingestion degrades by 48.1\% from 4K to 128K tokens, while the proposed ECIS limits degradation to only 6.8\%.}
+\label{fig:scaling}
 \end{figure*}
 
 \subsection{Positional Profile---Lost in the Middle (RQ1, RQ2)}
@@ -215,10 +252,40 @@ ECIS (No Audit)       & 0.796 & 0.798 & 0.794 & 0.795 & 0.795 & $-0.2\%$  \\
 The classic U-shaped ``lost in the middle'' curve~\cite{r10} ($-$44.2\% dip for Naive) is virtually eliminated by ECIS ($-$0.2\%), confirming H2. Reordering reduces the dip to $-$5.0\%, but its length degradation ($-$36.1\%) confirms H1.
 
 \begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{fig2_lost_in_the_middle.png}
-  \caption{Lost-in-the-middle positional quality factor as evidence shifts from first to last document position. Naive ingestion shows the classic U-shaped curve ($-$44.2\% at centre). ECIS variants achieve a near-flat positional profile ($\Delta{=}0.2\%$), confirming positional invariance.}
-  \label{fig:position}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.92\textwidth, height=5.5cm,
+  xlabel={Relative Document Position (0 = first, 1 = last)},
+  ylabel={Position Quality Factor},
+  xmin=-0.05, xmax=1.05,
+  ymin=0.45, ymax=1.08,
+  ymajorgrids=true, grid style=dashed,
+  legend style={at={(0.98,0.35)},anchor=east,font=\small},
+  tick label style={font=\small},
+  label style={font=\small},
+  every axis plot/.append style={line width=1.4pt, mark size=3pt},
+  smooth
+]
+\addplot[color=colnaive,  mark=o]
+  coordinates {(0.00,0.980)(0.25,0.820)(0.50,0.556)(0.75,0.820)(1.00,0.980)};
+\addlegendentry{Naive Full-Context}
+\addplot[color=colreorder,mark=square]
+  coordinates {(0.00,1.000)(0.25,0.985)(0.50,0.950)(0.75,0.985)(1.00,1.000)};
+\addlegendentry{Reordered Context}
+\addplot[color=colecisna, mark=triangle]
+  coordinates {(0.00,1.000)(0.25,1.000)(0.50,0.998)(0.75,1.000)(1.00,1.000)};
+\addlegendentry{ECIS (No Audit)}
+\addplot[color=colecis,   mark=diamond]
+  coordinates {(0.00,1.000)(0.25,1.000)(0.50,0.998)(0.75,1.000)(1.00,1.000)};
+\addlegendentry{ECIS (Proposed)}
+\node[font=\scriptsize,colnaive,align=center] at (axis cs:0.50,0.49)
+  {Middle docs\\lost ($-$44.2\%)};
+\draw[->,colnaive,thin] (axis cs:0.50,0.515) -- (axis cs:0.50,0.549);
+\end{axis}
+\end{tikzpicture}
+\caption{Lost-in-the-middle positional quality factor as evidence shifts from first to last document. Naive ingestion shows the classic U-shaped curve ($-$44.2\% at centre). ECIS variants achieve a near-flat positional profile ($\Delta{=}0.2\%$), confirming positional invariance.}
+\label{fig:position}
 \end{figure*}
 
 \subsection{Dimensional Breakdown---Ablation Study (RQ3)}
@@ -246,10 +313,40 @@ ECIS (No Audit)          & 0.873 & 0.873 & 0.917 & 0.682 & 0.634 & $0.796 \pm 0.
 As shown in Table~\ref{tab:ablation}, ablation of the audit module drops $I$ by 21.2\% and $U$ by 24.8\%, while raw $A$ drops by only 3.2\%, confirming H3. This reveals that without an explicit contradiction matrix, the model silently collapses scientific debate into false consensus.
 
 \begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{fig3_ablation_metrics.png}
-  \caption{Per-dimension quality breakdown (Accuracy, Coherence, Provenance, Integration, Uncertainty Calibration) across all four methods. Removing the contradiction and provenance audit steps (ECIS No Audit) causes a 21.2\% collapse in cross-source integration ($I$) and a 24.8\% drop in uncertainty calibration ($U$), while accuracy ($A$) is barely affected ($-$3.2\%).}
-  \label{fig:ablation}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.92\textwidth, height=6cm,
+  ybar, bar width=10pt,
+  ylabel={Mean Score},
+  ymin=0, ymax=1.08,
+  xtick=data,
+  xticklabels={Accuracy ($A$), Coherence ($C$), Provenance ($P$), Integration ($I$), Uncert.\ Calib.\ ($U$)},
+  x tick label style={font=\small, align=center},
+  ymajorgrids=true, grid style=dashed,
+  legend style={at={(0.5,-0.22)},anchor=north,legend columns=4,font=\small},
+  label style={font=\small},
+  enlarge x limits=0.12,
+  nodes near coords,
+  nodes near coords style={font=\tiny, rotate=90, anchor=west},
+  every node near coord/.append style={/pgf/number format/.cd, fixed, precision=3}
+]
+\addplot[fill=colnaive,  draw=colnaive!80!black]
+  coordinates {(1,0.567)(2,0.554)(3,0.551)(4,0.477)(5,0.450)};
+\addlegendentry{Naive Full-Context}
+\addplot[fill=colreorder,draw=colreorder!80!black]
+  coordinates {(1,0.738)(2,0.714)(3,0.663)(4,0.646)(5,0.606)};
+\addlegendentry{Reordered Context}
+\addplot[fill=colecisna, draw=colecisna!80!black]
+  coordinates {(1,0.873)(2,0.873)(3,0.917)(4,0.682)(5,0.634)};
+\addlegendentry{ECIS (No Audit)}
+\addplot[fill=colecis,   draw=colecis!80!black]
+  coordinates {(1,0.901)(2,0.892)(3,0.931)(4,0.865)(5,0.843)};
+\addlegendentry{ECIS (Proposed)}
+\end{axis}
+\end{tikzpicture}
+\caption{Per-dimension quality breakdown across all four methods. Removing the contradiction and provenance audit steps (ECIS No Audit) causes a 21.2\% collapse in cross-source integration ($I$) and a 24.8\% drop in uncertainty calibration ($U$), while accuracy ($A$) is barely affected ($-$3.2\%).}
+\label{fig:ablation}
 \end{figure*}
 
 % -------------------------------------------------------
