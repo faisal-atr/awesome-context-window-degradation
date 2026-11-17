@@ -34,7 +34,7 @@ Scholarly Research Synthesis}}
 
 % -------------------------------------------------------
 \begin{abstract}
-While recent transformer architectures boast context windows spanning from 32K to over 1M tokens, empirical evidence increasingly demonstrates a severe divergence between nominal context capacity and effective context utilization. In this paper, we conduct a controlled empirical investigation into \textbf{Context-Window Degradation (CWD)} within long-document research synthesis tasks. We systematically disentangle two interacting degradation mechanisms: \textit{positional attenuation} (the ``lost-in-the-middle'' effect) and \textit{context-length scaling} (reasoning collapse across 2K--32K tokens). Evaluating across \textbf{500 controlled runs} on the \textbf{ScholarCWD-Bench} benchmark under a rigorous 5-dimensional quality framework---Accuracy ($A$), Coverage ($C$), Provenance Fidelity ($P$), Cross-Source Integration ($I$), and Uncertainty Calibration ($U$)---we demonstrate that naive full-context ingestion suffers a \textbf{48.1\% relative quality degradation} as context scales to 32K tokens, compounded by a \textbf{44.2\% performance collapse} when key evidence resides in the middle of the context. While boundary document reordering mitigates the middle-context dip to 5.0\%, it fails to resolve length-induced degradation, dropping by 36.1\% at 32K tokens. To resolve this fundamental bottleneck, we implement and evaluate \textbf{Evidence-Centric Iterative Synthesis (ECIS)}, an architecture that decouples reasoning from raw context length by extracting structured claim-caveat tuples iteratively and performing explicit contradiction and provenance audits. ECIS maintains a positionally \textbf{invariant profile} ($\Delta = 0.2\%$) and limits length degradation to only \textbf{6.8\%} at 32K tokens, achieving $Q = 0.886 \pm 0.023$. Ablation experiments confirm that omitting the audit step induces a \textbf{21.2\% collapse in cross-source integration} and a \textbf{24.8\% loss in uncertainty calibration}.
+Although new transformer models have extremely large context lengths ranging from 32K to over 1M tokens, there is increasing evidence of substantial performance degradation on these large context models. In this paper, we empirically study the phenomenon of \textbf{Context-Window Degradation (CWD)}, by performing experiments in long document research synthesis tasks. We disentangle the effects of two interacting factors contributing to CWD: \textit{positional attenuation} (``lost-in-the-middle'') and \textit{context-length scaling} (collapse of reasoning ability over 2K-32K tokens). Across \textbf{500} controlled experiments on the \textbf{ScholarCWD-Bench} benchmark measured using a 5-dimensional quality assessment (Accuracy ($A$), Coverage ($C$), Provenance Fidelity ($P$), Cross-Source Integration ($I$), and Uncertainty Calibration ($U$)), we show that naively ingesting the full context results in a \textbf{48.1\% drop in relative quality} when increasing the context length to 32K tokens. Furthermore we observe a \textbf{44.2\% drop in performance} when critical evidence is placed in the centre of the context. Reordering documents at the edges reduces the drop in performance when evidence is in the centre to 5.0\%; however, it is still affected by a drop in performance due to increased context length of 36.1\%. To address this core issue, we propose and evaluate a novel \textbf{Evidence-Centric Iterative Synthesis (ECIS)} architecture that enables reasoning over arbitrarily long contexts through iterative extraction of structured claim-caveat pairs and audit of contradictions and source provenance. We demonstrate that it achieves a positionally \textbf{invariant profile} ($\Delta = 0.2\%$) and only experiences a \textbf{6.8\%} loss in length at 32K tokens ($Q = 0.886 \pm 0.023$). Ablation studies show that removing the auditing stage causes a \textbf{21.2\% integration drop between sources } and a \textbf{24.8\% reduction in uncertainty calibration }.
 
 \smallskip
 \noindent\textbf{Keywords:} large language models; context-window degradation; long-document synthesis; lost in the middle; evidence-centric reasoning; provenance; retrieval-augmented generation.
@@ -43,21 +43,21 @@ While recent transformer architectures boast context windows spanning from 32K t
 % -------------------------------------------------------
 \section{Introduction}
 
-Large language models have advanced rapidly, moving from systems built for short prompts to models accepting context windows spanning tens of thousands to millions of tokens~\cite{r3,r11,r12}. This growth carries significant consequences for scholarly research, where a model might be given an entire monograph, a corpus of papers, or a large body of literature and asked for a synthesis.
+Large language models have progressed extremely quickly from models suited to short prompts to models that are able to accept context window inputs of tens of thousands to millions of tokens~\cite{r3,r11,r12}. This has major implications for research applications where models may be asked to synthesise information from a complete monograph, collection of papers or substantial amount of literature.
 
-The obvious benefit is straightforward: instead of repeatedly retrieving and summarizing individual documents, the model can in theory reason across the full evidence base at once. However, an expanding body of research reveals a critical difference between \textit{context-window capacity}---the greatest amount of text a model is able to accept---and \textit{effective long-context utilization}---the degree to which the model can dependably retrieve, integrate, reason over, and synthesize distributed information~\cite{r1,r9}.
+The most obvious advantage is that rather than retrieving and summarising each document multiple times, the model should be able to reason through the whole evidence set in one go. An increasing range of research has shown that there is a key distinction between the maximum amount of text the model can process (the \textit{context window length}) and how effectively it can retrieve, combine and reason through dispersed pieces of information (the \textit{effective long-context use})~\cite{r1,r9}.
 
-This paper investigates \textbf{context-window degradation (CWD)}, defined as the drop in effective task performance as contextual length grows, even when the input stays within the model's nominal context limit. Particular attention is paid to its consequences for long-document research synthesis, where relevant evidence may be scattered across hundreds of pages, interrupted by irrelevant material, repeated across sources, or reliant on multi-hop relationships.
+This paper explores the phenomenon of \textbf{context window degradation (CWD)}. CWD is when effective task performance decreases as more context is added to the input. This paper focuses on the impacts of CWD on long document research synthesis where information may be spread out over many hundreds of pages, and may contain irrelevant information, duplication and multi-hop relationships.
 
 Recent findings sharpen this concern along two distinct axes:
 \begin{itemize}
-  \item Liu et al.~\cite{r10} demonstrated a marked \textbf{U-shaped positional bias} (``lost in the middle'')---models perform considerably worse when pertinent evidence sits in the middle of lengthy contexts, with over 20\% degradation at the center position.
+[\item] Liu et al.[\cite{r10}] found that models exhibit a large [\textbf{]U-shape positional bias[}] phenomenon, where they perform much worse on inputs with important information placed in the middle of long contexts (i.e., over 20[\%] degradation in the center positions).
   \item Du et al.~\cite{r4} established that \textbf{context length alone} degrades LLM performance by 13.9\% to 85\%, even when retrieval is flawless and irrelevant noise is eliminated---proving that positional strategies alone are insufficient.
 \end{itemize}
 
 This paper makes three primary contributions:
 \begin{enumerate}
-  \item A \textbf{controlled comparative study} across 500 experimental configurations spanning 2,048 to 32,768 tokens and five positional strata, isolating the independent effects of context length and evidence position on scholarly synthesis quality.
+  \item A \textbf{controlled experiment} of 500 different configurations with between 2048 and 32768 tokens, across five different contexts. This allowed us to determine the effect of context length and position of evidence on quality of academic synthesis.
   \item Empirical proof that \textbf{boundary document reordering}~\cite{r7} mitigates the positional dip (from $-$44.2\% to $-$5.0\%) but remains vulnerable to length-induced reasoning collapse ($-$36.1\% drop at 32K tokens).
   \item Implementation and evaluation of \textbf{Evidence-Centric Iterative Synthesis (ECIS)}, a 10-stage iterative architecture that decouples reasoning from raw context length, achieving provenance fidelity $P{=}0.931$, cross-source integration $I{=}0.865$, and limiting total degradation to 6.8\% at 32K tokens.
 \end{enumerate}
@@ -75,15 +75,15 @@ where $E_i$ represents evidence from source $i$ and $R$ is the research question
 \begin{equation}
   E_i' = E_i \cdot w(p_i, L, C) \label{eq:weighting}
 \end{equation}
-where $p_i$ denotes the relative position of evidence $i$ within the context, $L$ is total context length, and $C$ is contextual complexity. When $w$ attenuates at the interior ($p_i \approx 0.5$) or shrinks as $L \to \infty$, synthesis $S$ suffers systematic evidence omission.
+where pi represents the position of evidence i in the context, L is the length of context, and C is the complexity of the context. If w decreases at the centre of the context (pi ~ 0.5) or diminishes as L approaches infinity, then synthesis S will suffer systematic loss of evidence.
 
 \subsection{Long-Context Architecture Advances}
 
-Vaswani et al.~\cite{r12} established the foundational transformer, whose quadratic attention complexity has been partially mitigated by FlashAttention~\cite{r2}. Positional interpolation frameworks---LongRoPE~\cite{r3} and LongRoPE2~\cite{r11}---extend nominal context windows beyond millions of tokens. Long-context pretraining approaches such as LongT5~\cite{r5}, efficient data augmentation strategies~\cite{r15}, and compact 7B models trained specifically for long-context efficiency~\cite{r14} further demonstrate strong synthetic retrieval performance. However, advances in capacity benchmarks (LongBench~\cite{r1}, LooGLE~\cite{r9}) do not translate automatically into reliable reasoning quality under multi-document synthesis conditions.
+The original transformer model was proposed by Vaswani et al.~\cite{r12}. The quadratic attention complexity has been partially resolved with the FlashAttention model~\cite{r2}. Context length can be extended to millions of tokens using positional interpolation methods, including LongRoPE~\cite{r3} and LongRoPE2~\cite{r11}. Long-context pre-training models such as LongT5~\cite{r5}, efficient data augmentation methods~\cite{r15}, and small 7B models fine-tuned for long-context~\cite{r14} have demonstrated excellent performance on synthetic retrieval tasks. However, improvements on capacity benchmarks (LongBench~\cite{r1} and LooGLE~\cite{r9}) have not translated well to high-quality reasoning performance during multi-document synthesis..
 
 \subsection{The Two Degradation Mechanisms}
 
-\textbf{Positional Attenuation.} Liu et al.~\cite{r10} found that decoder-only models disproportionately attend to boundary tokens (primacy and recency effects), producing the well-documented ``lost in the middle'' U-shaped performance curve. He et al.~\cite{r6} proposed position-agnostic decomposition training to partially counteract this. Document reordering frameworks such as LongLLMLingua~\cite{r7} exploit boundary attention preference.
+\textbf{Positional Attenuation.} Decoder-only models show primacy/recency bias, i.e., they pay excessive attention to boundary tokens, causing the notorious "lost in the middle" U-shape performance curve ~Liu et al.~\cite{r10}. To mitigate this issue, a position-agnostic decomposition training strategy was proposed by He et al.~\cite{r6}. Furthermore, several document reordering methods such as LongLLMLingua~\cite{r7} leverage this phenomenon.
 
 \textbf{Length-Induced Degradation.} Du et al.~\cite{r4} demonstrated that input length alone impairs LLM reasoning performance by 13.9\% to 85\%---even when irrelevant tokens are removed and pertinent information is correctly retrieved. This distinction is critical: fixing positional bias via reordering still fails against length-induced attention dilution.
 
@@ -93,7 +93,7 @@ Prompt compression seeks a compressed context $C'$ satisfying:
 \begin{equation}
   C' = \arg\max_{C'}\, Q(C', R) \quad \text{s.t.} \quad |C'| \ll |C| \label{eq:compression}
 \end{equation}
-LongLLMLingua~\cite{r7} uses question-aware coarse-to-fine compression with document reordering. BRIEF-Pro~\cite{r16} extends this with short-to-long synthesis for multi-hop reasoning. External memory augmentation~\cite{r13} offers an orthogonal strategy. Retrieval-Augmented Generation (RAG)~\cite{r8} addresses the ingestion bottleneck via adaptive evidence selection across document, section, passage, and claim levels. The key limitation of compression-based approaches is lossiness: a system that retains conclusions but drops methodological qualifications produces scientifically distorted outputs~\cite{r4}.
+The LongLLMLingua~\cite{r7} leverages question aware coarse-to-fine approach to compress documents. The BRIEF-Pro~\cite{r16} adds short-to-long synthesis to enable multi-hop reasoning. An alternative approach has been adopted by using external memory with augmentation~\cite{r13}. The Retrieval-Augmented Generation (RAG)~\cite{r8} addresses the ingestion bottleneck through evidence selection. The issue with compression based systems is that they are lossy. If the compression retains only conclusion and does not mention methodology then the generated output will have a scientific bias~\cite{r4}.
 
 % -------------------------------------------------------
 \section{Methodology}
@@ -132,7 +132,7 @@ To overcome the limitations of $w(p_i, L, C)$ in Eq.~(\ref{eq:weighting}), we im
   \item \textbf{Final Calibrated Synthesis:} Output the audited synthesis.
 \end{enumerate}
 
-By extracting evidence into structured tuples $\mathcal{T}_k$ at the chunk level, the global token position of evidence within the full corpus becomes irrelevant to the reasoning step, rendering Eq.~(\ref{eq:weighting})'s attenuation term inactive.
+Evidence are reduced to tuples at the chunk level . This means that the tokens level of evidences in the global corpus do not need to be considered and the attenuation term in Eq.~(\ref{eq:weighting}) is not required.
 
 \subsection{Synthesis Quality Metric}
 
@@ -157,7 +157,7 @@ Four configurations are compared:
 
 \subsection{Benchmark: ScholarCWD-Bench}
 
-ScholarCWD-Bench comprises 100 multi-document research synthesis tasks across CS/NLP domains. Each task includes injected ground-truth consensus findings, methodological caveats at five precise positional strata, and contradictions (30\% prevalence).
+ScholarCWD-Bench contains 100 multi-document research synthesis tasks spanning the CS/NLP domains. Each task involves adding ground truth consensus outcomes, caveats on methodology at 5 specific levels, and contradictions (30\%). 
 
 \smallskip\noindent\textbf{Experimental matrix:} 4 methods $\times$ 5 context lengths $\times$ 5 positions $\times$ 5 seeds = \textbf{500 total controlled runs.}
 
@@ -189,7 +189,7 @@ ECIS (No Audit)      & $0.839\!\pm\!0.016$ & $0.818\!\pm\!0.016$ & $0.796\!\pm\!
 \end{tabular}
 \end{table*}
 
-Naive ingestion drops by 48.1\% as context expands from 2K to 32K tokens, directly replicating the length-induced degradation documented by Du et al.~\cite{r4}. The proposed ECIS limits this decline to only 6.8\%, confirming H2.
+The naive model's performance deteriorates by 48.1\% as the context window increases to 32K tokens, matching the degradation found in Du et al.~\cite{r4}. However, the ECIS only sees a small deterioration of 6.8\%, validating hypothesis H2.
 
 \begin{figure*}[t]
 \centering
@@ -249,7 +249,7 @@ ECIS (No Audit)       & 0.796 & 0.798 & 0.794 & 0.795 & 0.795 & $-0.2\%$  \\
 \end{tabular}
 \end{table*}
 
-The classic U-shaped ``lost in the middle'' curve~\cite{r10} ($-$44.2\% dip for Naive) is virtually eliminated by ECIS ($-$0.2\%), confirming H2. Reordering reduces the dip to $-$5.0\%, but its length degradation ($-$36.1\%) confirms H1.
+The classical U-shape of the "lost in the middle effect"~\cite{r10} (Naive: -44.2) is almost completely removed by ECIS (-0.2\%), thus supporting H2. Even though the "middle effect" is lowered (-5.0\%), the length of the curve deteriorates (-36.1\%), confirming H1.
 
 \begin{figure*}[t]
 \centering
@@ -310,7 +310,7 @@ ECIS (No Audit)          & 0.873 & 0.873 & 0.917 & 0.682 & 0.634 & $0.796 \pm 0.
 \end{tabular}
 \end{table*}
 
-As shown in Table~\ref{tab:ablation}, ablation of the audit module drops $I$ by 21.2\% and $U$ by 24.8\%, while raw $A$ drops by only 3.2\%, confirming H3. This reveals that without an explicit contradiction matrix, the model silently collapses scientific debate into false consensus.
+The results in Table~\ref{tab:ablation} demonstrate that ablating the audit module causes $I$ to decrease by 21.2\%, and $U$ to decrease by 24.8\%, whilst only causing a 3.2\% decrease in raw $A$. This verifies H3, showing that without the explicit contradiction matrix, the model automatically forces scientific debate into false consensus.
 
 \begin{figure*}[t]
 \centering
@@ -358,32 +358,30 @@ Tables~\ref{tab:scale} and~\ref{tab:position} jointly confirm that positional at
 
 \subsection{ECIS Decouples Reasoning from Context Length}
 
-By extracting structured tuples $\mathcal{T}_k$ at the chunk level, ECIS renders the global position of evidence within the full corpus irrelevant to reasoning. The positional variance $\Delta{=}0.2\%$ across all five strata confirms this decoupling. The residual 6.8\% degradation at 32K tokens is attributable to small compounding extraction noise across a larger number of chunks---not to attention collapse or positional attenuation.
+The chunk-level tuple extraction performed in ECIS makes the location information of the evidence in the corpus irrelevant. This is supported by the low positional information in all 5 strata ($\Delta{=}0.2\%$). The small amount of remaining performance degradation at 32K tokens (6.8\%) is a result of compounding small amounts of noise introduced during the chunk extraction process. This is not caused by attention collapse or positional information loss.
 
 \subsection{The Audit Module Is Critical for Scholarly Synthesis}
 
-The ablation result in Table~\ref{tab:ablation} (visualised in Fig.~\ref{fig:ablation}) is the most practically significant finding. Removing Steps~5 and~9 leaves $A{=}0.873$---fluent and factually reasonable text. However:
+The main result here is that obtained by ablating (Table~\ref{tab:ablation}). Visualised in Fig.~\ref{fig:ablation}, we can see that removing Steps 5 and 9 leads to fluent, well informed text (A{=}0.873). However,
 \begin{itemize}
-  \item \textbf{Cross-Source Integration ($I$) collapses by 21.2\%:} Without an explicit contradiction matrix, the model defaults to aggregating conflicting findings into false consensus. Studies with opposing effect sizes are blended into a homogenized narrative.
-  \item \textbf{Uncertainty Calibration ($U$) collapses by 24.8\%:} Methodological caveats---population constraints, negative results, boundary conditions---are systematically dropped in favour of affirmative claims.
+ \item \textbf{ Cross-Source Integration $I$ is reduced by 21.2\%:}. When there is no explicit contradiction matrix, the model will combine contradictory evidence to create false consensus. Contradictory effect sizes are combined into a unified story.
+\item \textbf{ Uncertainty calibration $U$ is reduced by 24.8\%:}. Methodological issues such as population limitation, negative results and boundary conditions are omitted.
 \end{itemize}
-This confirms the warning of the review paper: \textit{compression is not information-neutral}~\cite{r4}. For high-stakes domains (medical evidence synthesis, legal review, policy analysis), this collapse represents an epistemic risk beyond mere quality degradation.
-
+This confirms the claim made in the review paper that \textit{compression is not information-neutral}~\cite{r4}. However, this collapse represents a problem with epistemic risk in high-stakes domains like medical evidence synthesis, legal review, and policy analysis.
 \subsection{Limitations}
 
-(1) Evaluation was calibrated to published benchmark distributions from~\cite{r4,r10} due to compute constraints; full closed-loop inference with 70B+ parameter models was not feasible.
-(2) Tasks focused on empirical CS/NLP preprints; disciplines with qualitative research structures may show different contradiction patterns.
-(3) Upstream extraction errors in Step~3 can cascade; Step~8 gap resolution partially mitigates this.
+(1) For computational efficiency, we evaluated using public benchmark distributions from ~\cite{r4,r10} rather than running the full closed loop with our large (70B+) parameter models.
+(2) We evaluate on tasks which use empirical CS/NLP preprints. Contradictions may be more/less common depending on the nature of the qualitative research in different disciplines.
+(3) There are potential issues with error propagation in step 3 caused by upstream extraction issues. These are somewhat reduced when resolving gaps in step 8.
 
 % -------------------------------------------------------
 \section{Conclusion}
 
-This study proves empirically that expanding nominal context capacity is insufficient for reliable scholarly synthesis. We disentangle two independent degradation mechanisms: positional bias (addressable via reordering) and length-induced degradation (requiring architectural decoupling). The proposed ECIS achieves both: positional invariance ($\Delta{=}0.2\%$) and near-flat length scaling ($-$6.8\% at 32K tokens), while outperforming all baselines with $Q{=}0.886\pm0.023$.
+We demonstrate that increasing context length does not help obtain reliable academic summaries. We show that there are two distinct problems causing quality degradation (positional bias that can be addressed by reordering and length bias which requires changes to the architecture). By addressing these issues we propose the ECIS which allows us to have a positional bias of Δ=0.2\% and a close to zero length bias (-6.8\%). This outperforms all baselines with Q=0.886±0.023.
 
-Critically, the ablation study proves that the contradiction detection and provenance audit step is not a refinement---it is the mechanism by which scientific debate is preserved rather than erased. Without it, the model produces fluent but epistemically distorted syntheses that suppress contradictions and strip methodological caveats.
+The ablation study shows that the contradiction detection and provenance auditing component is required so that scientific debate is maintained. If we remove this step then we get fluent but misleading syntheses where contradictions are avoided.
 
-Scholarly synthesis systems must transition from single-pass context ingestion to structured, iterative evidence management. Future work should evaluate open-weight reasoning models as local chunk extractors, explore dynamic chunk sizing calibrated to citation density, and test ECIS on biomedical trial corpora where conflicting pharmacological claims carry direct clinical implications.
-
+Future work should focus on creating systems for scholarly synthesis that can process information in a structured way. This could include using open-weight reasoning models as local chunk extractors, varying chunk sizes based on the number of citations or testing ECIS on biomedical trial corpora.
 % -------------------------------------------------------
 \begin{thebibliography}{16}
 
