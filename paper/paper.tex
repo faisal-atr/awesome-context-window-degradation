@@ -1,483 +1,332 @@
-\documentclass[10pt,twocolumn,letterpaper]{article}
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{amsmath,amssymb}
-\usepackage{booktabs}
 \usepackage{graphicx}
-\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
-\usepackage[margin=0.75in]{geometry}
-\usepackage{array}
-\usepackage{float}
-\usepackage{pgfplots}
-\usepackage{pgfplotstable}
-\pgfplotsset{compat=1.18}
-\usepackage{xcolor}
-\definecolor{colnaive}{RGB}{220,60,60}
-\definecolor{colreorder}{RGB}{240,160,30}
-\definecolor{colecisna}{RGB}{52,152,219}
-\definecolor{colecis}{RGB}{39,174,96}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{lmodern}
+\usepackage[hidelinks]{hyperref}
+\usepackage[authoryear,round,sort]{natbib}
 
-\title{\textbf{Beyond Nominal Capacity: Evaluating and Mitigating\\
-Context-Window Degradation in Multi-Document\\
-Scholarly Research Synthesis}}
-
+\title{Context-Window Degradation in Research Synthesis:\\
+Does Evidence Position Affect Citation Support?\\
+A Controlled Null Result}
 \author{
-  \textbf{Faisal}\\
-  Department of Information Technology\\[2pt]
-  \small\textit{Implementation study based on the review:}\\
-  \small\textit{``Context-Window Degradation and Its Impact on Long-Document Research Synthesis''}
+  Faisal\\
+  Department of Information Technology\\
+  IIIT Allahabad\\
+  \texttt{MRA2026013}
 }
-
-\date{November 2026}
+\date{}
 
 \begin{document}
 \maketitle
 
-% -------------------------------------------------------
 \begin{abstract}
-Although new transformer models have extremely large context lengths ranging from 32K to over 1M tokens, there is increasing evidence of substantial performance degradation on these large context models. In this paper, we empirically study the phenomenon of \textbf{Context-Window Degradation (CWD)}, by performing experiments in long document research synthesis tasks. We disentangle the effects of two interacting factors contributing to CWD: \textit{positional attenuation} (``lost-in-the-middle'') and \textit{context-length scaling} (collapse of reasoning ability over 2K-32K tokens). Across \textbf{500} controlled experiments on the \textbf{ScholarCWD-Bench} benchmark measured using a 5-dimensional quality assessment (Accuracy ($A$), Coverage ($C$), Provenance Fidelity ($P$), Cross-Source Integration ($I$), and Uncertainty Calibration ($U$)), we show that naively ingesting the full context results in a \textbf{48.1\% drop in relative quality} when increasing the context length to 32K tokens. Furthermore we observe a \textbf{44.2\% drop in performance} when critical evidence is placed in the centre of the context. Reordering documents at the edges reduces the drop in performance when evidence is in the centre to 5.0\%; however, it is still affected by a drop in performance due to increased context length of 36.1\%. To address this core issue, we propose and evaluate a novel \textbf{Evidence-Centric Iterative Synthesis (ECIS)} architecture that enables reasoning over arbitrarily long contexts through iterative extraction of structured claim-caveat pairs and audit of contradictions and source provenance. We demonstrate that it achieves a positionally \textbf{invariant profile} ($\Delta = 0.2\%$) and only experiences a \textbf{6.8\%} loss in length at 32K tokens ($Q = 0.886 \pm 0.023$). Ablation studies show that removing the auditing stage causes a \textbf{21.2\% integration drop between sources } and a \textbf{24.8\% reduction in uncertainty calibration }.
-
-\smallskip
-\noindent\textbf{Keywords:} large language models; context-window degradation; long-document synthesis; lost in the middle; evidence-centric reasoning; provenance; retrieval-augmented generation.
+A language model that accepts a long input does not necessarily use every part of that input equally well.
+Earlier work found that accuracy drops when the relevant text sits in the middle of the context,
+and the literature review that preceded this study argued that this matters for research synthesis, where a missed passage means a missed citation.
+This paper tests one small piece of that argument.
+We moved the two gold passages of a seven-passage packet to the beginning, the middle, or the end of the prompt
+and measured whether the model still cited them.
+The experiment used twelve synthetic packets, one model (\texttt{openai/gpt-oss-20b} through the Groq free tier),
+and one fixed prompt, giving 36 responses.
+Evidence coverage and citation support were 1.00 in all three positions, so the expected middle-position drop did not appear.
+A keyword-based correctness score did fall from 0.58 to 0.50 to 0.42 across begin, middle and end,
+but the 18 responses it marked wrong all cited both gold passages,
+and on reading them each gave the expected answer in words that differed from the answer key.
+We report this as a null result for short, easy contexts.
+It says nothing about long documents, and the prompts here were only about 170 words long.
 \end{abstract}
 
-% -------------------------------------------------------
+\noindent\textbf{Keywords:} long-context language models, lost in the middle, citation support, evidence coverage, null result
+
 \section{Introduction}
+\label{sec:intro}
 
-Large language models have progressed extremely quickly from models suited to short prompts to models that are able to accept context window inputs of tens of thousands to millions of tokens~\cite{r3,r11,r12}. This has major implications for research applications where models may be asked to synthesise information from a complete monograph, collection of papers or substantial amount of literature.
+Students and researchers now routinely paste several papers or excerpts into a language model and ask for a synthesis.
+The working assumption is that anything that fits in the context window will be read.
+\citet{liu2024lost} showed that this assumption is unsafe: in multi-document question answering and in key-value retrieval,
+models did best when the relevant information was at the start or the end of the input and noticeably worse when it was in the middle.
+Benchmarks built since then point the same way.
+Models still struggle as inputs get longer \citep{bai2024longbench},
+including models that pass simple retrieval tests \citep{hsieh2024ruler}.
 
-The most obvious advantage is that rather than retrieving and summarising each document multiple times, the model should be able to reason through the whole evidence set in one go. An increasing range of research has shown that there is a key distinction between the maximum amount of text the model can process (the \textit{context window length}) and how effectively it can retrieve, combine and reason through dispersed pieces of information (the \textit{effective long-context use})~\cite{r1,r9}.
+For research synthesis the concern is slightly different from plain question answering.
+A synthesis can read well and still leave out a source, or attach a citation to a passage that does not support the claim.
+\citet{zhang2025longcite} treat citation quality in long-context question answering as a problem of its own for this reason.
+Our earlier literature review, on context-window degradation and its impact on long-document research synthesis,
+surveyed this work and left one question open.
+The position studies we read measure answer accuracy.
+We did not come across one that varied evidence position and scored which passages were cited,
+although our search was limited and such work may exist.
 
-This paper explores the phenomenon of \textbf{context window degradation (CWD)}. CWD is when effective task performance decreases as more context is added to the input. This paper focuses on the impacts of CWD on long document research synthesis where information may be spread out over many hundreds of pages, and may contain irrelevant information, duplication and multi-hop relationships.
+That gap is what this paper tests, at a scale that one student with a laptop and a free API can manage.
+The review covered degradation as the context grows long; the experiment below holds the context short on purpose,
+so that we start from the easiest case and can see whether a position effect appears even there.
+The question is:
+with the passages and the prompt held fixed, does placing the gold evidence in the middle of a short multi-passage context
+lower citation support or evidence coverage compared with placing it at the beginning or the end?
+We expected a drop in the middle for both measures and call these expectations RQ1 (citation support) and RQ2 (evidence coverage).
 
-Recent findings sharpen this concern along two distinct axes:
-\begin{itemize}
-[\item] Liu et al.[\cite{r10}] found that models exhibit a large [\textbf{]U-shape positional bias[}] phenomenon, where they perform much worse on inputs with important information placed in the middle of long contexts (i.e., over 20[\%] degradation in the center positions).
-  \item Du et al.~\cite{r4} established that \textbf{context length alone} degrades LLM performance by 13.9\% to 85\%, even when retrieval is flawless and irrelevant noise is eliminated---proving that positional strategies alone are insufficient.
-\end{itemize}
+The answer on our data is no.
+Both measures were at their maximum in every condition.
+The paper therefore makes a modest contribution.
+It describes a controlled comparison that can be rerun from the saved configuration,
+reports a null result on the two primary measures,
+and shows through a reading of the raw responses that the one measure which did vary was mostly picking up differences in wording.
+In the terms of the course assignment this is a controlled comparative study (Pathway~B).
+We propose no new method or benchmark.
 
-This paper makes three primary contributions:
-\begin{enumerate}
-  \item A \textbf{controlled experiment} of 500 different configurations with between 2048 and 32768 tokens, across five different contexts. This allowed us to determine the effect of context length and position of evidence on quality of academic synthesis.
-  \item Empirical proof that \textbf{boundary document reordering}~\cite{r7} mitigates the positional dip (from $-$44.2\% to $-$5.0\%) but remains vulnerable to length-induced reasoning collapse ($-$36.1\% drop at 32K tokens).
-  \item Implementation and evaluation of \textbf{Evidence-Centric Iterative Synthesis (ECIS)}, a 10-stage iterative architecture that decouples reasoning from raw context length, achieving provenance fidelity $P{=}0.931$, cross-source integration $I{=}0.865$, and limiting total degradation to 6.8\% at 32K tokens.
-\end{enumerate}
+\section{Related Work}
+\label{sec:related}
 
-% -------------------------------------------------------
-\section{Background and Related Work}
+The study by \citet{liu2024lost} is the direct starting point.
+They changed where the relevant document or key-value pair appeared in the input and found the pattern now known as ``lost in the middle'':
+highest performance at the beginning or end, and a significant drop in the middle, including for models built for long contexts.
+Our design borrows their manipulation and applies it to a different outcome.
 
-\subsection{Formal Synthesis Formulation}
+Two benchmarks shaped our expectations about difficulty.
+LongBench \citep{bai2024longbench} collects 21 datasets in six task categories, with English inputs averaging 6,711 words,
+and reports that even the strongest model it tested struggled as contexts grew.
+RULER \citep{hsieh2024ruler} starts from the needle-in-a-haystack test and adds multi-hop tracing and aggregation tasks.
+Almost all of the 17 models it evaluated were near perfect on the plain needle test and then dropped sharply as input length increased.
+Both results suggest that degradation depends on length and task difficulty together,
+which matters for reading our own result because our inputs are far shorter than anything in these benchmarks.
 
-Following the review paper, the general multi-document synthesis task across $n$ evidence sources is:
-\begin{equation}
-  S = f(E_1, E_2, \dots, E_n, R) \label{eq:synthesis}
-\end{equation}
-where $E_i$ represents evidence from source $i$ and $R$ is the research question. Under context degradation, the effective evidential contribution $E_i'$ is governed by:
-\begin{equation}
-  E_i' = E_i \cdot w(p_i, L, C) \label{eq:weighting}
-\end{equation}
-where pi represents the position of evidence i in the context, L is the length of context, and C is the complexity of the context. If w decreases at the centre of the context (pi ~ 0.5) or diminishes as L approaches infinity, then synthesis S will suffer systematic loss of evidence.
+On citations, LongCite \citep{zhang2025longcite} introduces a benchmark for long-context question answering with citations
+and fine-tunes models to produce sentence-level citations in a single pass.
+We do not use their models or data.
+What we take from that work is the idea that citation quality should be scored separately from answer correctness.
+Our two primary measures are much cruder than theirs, since they operate on passage ids and not on sentences.
 
-\subsection{Long-Context Architecture Advances}
+\section{Method}
+\label{sec:method}
 
-The original transformer model was proposed by Vaswani et al.~\cite{r12}. The quadratic attention complexity has been partially resolved with the FlashAttention model~\cite{r2}. Context length can be extended to millions of tokens using positional interpolation methods, including LongRoPE~\cite{r3} and LongRoPE2~\cite{r11}. Long-context pre-training models such as LongT5~\cite{r5}, efficient data augmentation methods~\cite{r15}, and small 7B models fine-tuned for long-context~\cite{r14} have demonstrated excellent performance on synthetic retrieval tasks. However, improvements on capacity benchmarks (LongBench~\cite{r1} and LooGLE~\cite{r9}) have not translated well to high-quality reasoning performance during multi-document synthesis..
+\subsection{Task and data}
 
-\subsection{The Two Degradation Mechanisms}
+Each item, which we call a packet, has a question, seven short passages with ids \texttt{P1} to \texttt{P7}, and a short answer key.
+Two passages are gold, meaning they are needed to answer the question.
+The other five are distractors written as unrelated campus notices, such as a bike rack extension or a jammed label printer.
+In seven of the twelve packets both gold passages support the same answer.
+In the other five the second gold passage qualifies or contradicts the first,
+so a complete answer has to report the disagreement and cite both.
+The packets were written for this study and are not excerpts from real papers.
+Six are about learning and study habits, for example spaced practice and sleep and attention.
+The other six are short statements about long-context evaluation itself.
 
-\textbf{Positional Attenuation.} Decoder-only models show primacy/recency bias, i.e., they pay excessive attention to boundary tokens, causing the notorious "lost in the middle" U-shape performance curve ~Liu et al.~\cite{r10}. To mitigate this issue, a position-agnostic decomposition training strategy was proposed by He et al.~\cite{r6}. Furthermore, several document reordering methods such as LongLLMLingua~\cite{r7} leverage this phenomenon.
+\subsection{Position manipulation}
 
-\textbf{Length-Induced Degradation.} Du et al.~\cite{r4} demonstrated that input length alone impairs LLM reasoning performance by 13.9\% to 85\%---even when irrelevant tokens are removed and pertinent information is correctly retrieved. This distinction is critical: fixing positional bias via reordering still fails against length-induced attention dilution.
+The two gold passages are kept next to each other and moved as a block.
+In the \emph{begin} condition the block comes first and the five distractors follow.
+In the \emph{end} condition the distractors come first.
+In the \emph{middle} condition two distractors precede the block and three follow it.
+The passage text and ids are identical in all three conditions, so a passage labelled \texttt{P2} keeps that label wherever it appears.
+Only the order changes.
 
-\subsection{Compression, Memory, and Retrieval}
+\subsection{Prompt and model}
 
-Prompt compression seeks a compressed context $C'$ satisfying:
-\begin{equation}
-  C' = \arg\max_{C'}\, Q(C', R) \quad \text{s.t.} \quad |C'| \ll |C| \label{eq:compression}
-\end{equation}
-The LongLLMLingua~\cite{r7} leverages question aware coarse-to-fine approach to compress documents. The BRIEF-Pro~\cite{r16} adds short-to-long synthesis to enable multi-hop reasoning. An alternative approach has been adopted by using external memory with augmentation~\cite{r13}. The Retrieval-Augmented Generation (RAG)~\cite{r8} addresses the ingestion bottleneck through evidence selection. The issue with compression based systems is that they are lossy. If the compression retains only conclusion and does not mention methodology then the generated output will have a scientific bias~\cite{r4}.
+Every prompt uses the same template.
+It tells the model to use only the passages given, to cite passage ids in square brackets after each factual claim,
+to say so when sources disagree, and to say so when the evidence is insufficient.
+The passages follow, then the question.
+The model is called once per prompt, with no retrieval step, no few-shot examples, and no fine-tuning.
 
-% -------------------------------------------------------
-\section{Methodology}
+\subsection{Measures}
 
-\subsection{Research Questions and Hypotheses}
+\emph{Evidence coverage} is the fraction of gold passage ids that appear as citations in the response.
+\emph{Citation support} is the fraction of cited ids that are gold.
+A response that cites both gold passages and nothing else scores 1.00 on both.
+These are the primary measures.
+The secondary measure, \emph{keyword correctness}, is 1 if the answer key appears as a substring of the response
+after lowercasing and removing markdown and hyphen differences, and 0 otherwise.
+The keys are two or three words long, for example ``does not guarantee''.
 
-\textbf{RQ1:} To what extent does boundary document reordering mitigate context-window degradation as context scales from 2,048 to 32,768 tokens?
+Extracting citations took more care than expected.
+The model did not always write \texttt{[P2]} as instructed.
+It also produced full-width brackets, parentheses, bold ids such as \texttt{**P2**}, and bare ids at the start of bullet points.
+The final extractor accepts all of these forms.
+Section~\ref{sec:deep} describes one error that the earlier, stricter version caused.
 
-\smallskip\noindent\textit{H1:} Reordering eliminates positional bias at short contexts ($\le$4K) but degrades by $\ge$25\% at 32K tokens due to length-induced attention interference~\cite{r4}.
-
-\smallskip\noindent\textbf{RQ2:} Does ECIS eliminate positional bias and maintain synthesis quality across context lengths up to 32K tokens?
-
-\smallskip\noindent\textit{H2:} By lifting raw text into structured tuples before reasoning, ECIS maintains an invariant positional profile ($\Delta \le 2\%$) and degrades by $<$10\% at 32K tokens.
-
-\smallskip\noindent\textbf{RQ3:} What is the specific contribution of the contradiction and provenance audit module within ECIS?
-
-\smallskip\noindent\textit{H3:} Ablating the audit disproportionately degrades $I$ and $U$ by $>$20\%, while affecting $A$ only marginally.
-
-\subsection{The ECIS Pipeline}
-
-To overcome the limitations of $w(p_i, L, C)$ in Eq.~(\ref{eq:weighting}), we implement the following 10-stage ECIS architecture:
-
-\begin{enumerate}
-  \item \textbf{Question Decomposition:} Parse $R$ into faceted sub-queries.
-  \item \textbf{Chunked Ingestion:} Segment the corpus into 1,000-token micro-contexts.
-  \item \textbf{Structured Tuple Extraction:} Extract evidence as tuples:
-  \begin{equation}
-    \mathcal{T}_k = \langle \text{Claim}_k,\; \text{Effect}_k,\; \text{Caveat}_k,\; \text{Src}_k,\; \text{Conf}_k \rangle
-  \end{equation}
-  \item \textbf{Semantic Clustering:} Group tuples by conceptual claim targets.
-  \item \textbf{Contradiction Detection:} Pairwise divergence checks across effect sizes.
-  \item \textbf{Source Quality Weighting:} Weight by methodological rigor vs.\ token position.
-  \item \textbf{Intermediate Synthesis:} Cluster-level synthesis drafts.
-  \item \textbf{Targeted Gap Resolution:} Re-query source text for discrepancies.
-  \item \textbf{Contradiction \& Provenance Audit:} Verify citation fidelity; preserve caveats.
-  \item \textbf{Final Calibrated Synthesis:} Output the audited synthesis.
-\end{enumerate}
-
-Evidence are reduced to tuples at the chunk level . This means that the tokens level of evidences in the global corpus do not need to be considered and the attenuation term in Eq.~(\ref{eq:weighting}) is not required.
-
-\subsection{Synthesis Quality Metric}
-
-Following the review paper's formulation, synthesis quality $Q$ is measured across five orthogonal dimensions:
-\begin{equation}
-  Q = \frac{1}{5}\left(A + C + P + I + U\right) \label{eq:metric}
-\end{equation}
-where $A$ = Factual Accuracy, $C$ = Evidence Coverage, $P$ = Provenance Fidelity, $I$ = Cross-Source Integration, and $U$ = Uncertainty Calibration.
-
-\subsection{Evaluated Systems}
-
-Four configurations are compared:
-\begin{enumerate}
-  \item \textbf{Naive Full-Context:} Direct single-pass prompt concatenation of all source documents.
-  \item \textbf{Reordered Context:} Relevance-sorted boundary packing~\cite{r7,r10}.
-  \item \textbf{ECIS (No Audit):} Full ECIS with Steps 5 and 9 (contradiction detection + provenance audit) disabled.
-  \item \textbf{ECIS (Proposed):} Complete 10-stage iterative pipeline.
-\end{enumerate}
-
-% -------------------------------------------------------
 \section{Experimental Setup}
+\label{sec:setup}
 
-\subsection{Benchmark: ScholarCWD-Bench}
+All responses came from \texttt{openai/gpt-oss-20b}, served through Groq's OpenAI-compatible endpoint on the free tier.
+Temperature was 0 and the output limit was 768 tokens.
+The limit had to be that high because the model spends part of its budget on reasoning before it writes the answer,
+and smaller limits returned empty answers during pilot calls.
+The settings were fixed in a configuration file before the main run.
 
-ScholarCWD-Bench contains 100 multi-document research synthesis tasks spanning the CS/NLP domains. Each task involves adding ground truth consensus outcomes, caveats on methodology at 5 specific levels, and contradictions (30\%). 
+Twelve packets in three positions give 36 prompts.
+The prompts are between 153 and 189 words long (170 on average), and the responses between 46 and 131 words.
+The free tier returned rate-limit errors partway through,
+so the run script waits and retries, and it can resume without repeating finished calls.
+All 36 responses reported here are stored in one run directory, each with its full prompt.
+Scoring happens offline on those saved files, which meant the scorer could be corrected and rerun without calling the model again.
+The pipeline is written in Python and ran on a MacBook Air with 8\,GB of memory.
+Nothing was trained, so there is no train/test split to leak across.
 
-\smallskip\noindent\textbf{Experimental matrix:} 4 methods $\times$ 5 context lengths $\times$ 5 positions $\times$ 5 seeds = \textbf{500 total controlled runs.}
-
-\smallskip\noindent Context lengths: $L \in \{2048, 4096, 8192, 16384, 32768\}$ tokens.\\
-Evidence positions: $p \in \{0.05, 0.25, 0.50, 0.75, 0.95\}$.\\
-Random seeds: $\{42, 123, 456, 789, 1024\}$.
-
-% -------------------------------------------------------
 \section{Results}
+\label{sec:results}
 
-\subsection{Context-Length Scaling (RQ1, RQ2)}
+Table~\ref{tab:means} and Figure~\ref{fig:means} give the means by position.
 
-Table~\ref{tab:scale} reports mean composite quality $Q$ ($\pm$~Std) across all runs, averaged over five positional strata and five seeds.
-
-\begin{table*}[t]
+\begin{table}[t]
 \centering
-\caption{Composite Quality $Q$ Across Context Lengths (Mean $\pm$ Std, $N=500$ runs)}
-\label{tab:scale}
-\small
-\begin{tabular}{lrrrrrrr}
+\caption{Mean scores by position of the gold passages (12 packets per position).}
+\label{tab:means}
+\begin{tabular}{lccc}
 \toprule
-\textbf{Method} & \textbf{2,048} & \textbf{4,096} & \textbf{8,192} & \textbf{16,384} & \textbf{32,768} & \textbf{Rel.\ Drop} \\
+Position & Coverage & Citation support & Keyword correctness \\
 \midrule
-Naive Full-Context   & $0.684\!\pm\!0.088$ & $0.603\!\pm\!0.112$ & $0.519\!\pm\!0.129$ & $0.437\!\pm\!0.134$ & $0.355\!\pm\!0.128$ & $-48.1\%$ \\
-Reordered Context    & $0.822\!\pm\!0.021$ & $0.748\!\pm\!0.023$ & $0.673\!\pm\!0.022$ & $0.598\!\pm\!0.024$ & $0.525\!\pm\!0.022$ & $-36.1\%$ \\
-ECIS (No Audit)      & $0.839\!\pm\!0.016$ & $0.818\!\pm\!0.016$ & $0.796\!\pm\!0.015$ & $0.773\!\pm\!0.016$ & $0.753\!\pm\!0.017$ & $-10.3\%$ \\
-\textbf{ECIS (Proposed)} & $\mathbf{0.918\!\pm\!0.012}$ & $\mathbf{0.902\!\pm\!0.012}$ & $\mathbf{0.886\!\pm\!0.012}$ & $\mathbf{0.870\!\pm\!0.012}$ & $\mathbf{0.856\!\pm\!0.013}$ & $\mathbf{-6.8\%}$ \\
+begin  & 1.00 & 1.00 & 0.58 \\
+middle & 1.00 & 1.00 & 0.50 \\
+end    & 1.00 & 1.00 & 0.42 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-The naive model's performance deteriorates by 48.1\% as the context window increases to 32K tokens, matching the degradation found in Du et al.~\cite{r4}. However, the ECIS only sees a small deterioration of 6.8\%, validating hypothesis H2.
-
-\begin{figure*}[t]
+\begin{figure}[t]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-  width=0.92\textwidth, height=5.5cm,
-  xlabel={Context Length (tokens)},
-  ylabel={Composite Quality $Q$},
-  xmin=0.5, xmax=6.5,
-  ymin=0.15, ymax=1.05,
-  xtick={1,2,3,4,5,6},
-  xticklabels={4K,8K,16K,32K,64K,128K},
-  ymajorgrids=true, grid style=dashed,
-  legend style={at={(0.98,0.98)},anchor=north east,font=\small},
-  tick label style={font=\small},
-  label style={font=\small},
-  every axis plot/.append style={line width=1.4pt, mark size=3pt}
-]
-\addplot[color=colnaive,  mark=o]
-  coordinates {(1,0.603)(2,0.519)(3,0.437)(4,0.355)(5,0.290)(6,0.240)};
-\addlegendentry{Naive Full-Context}
-\addplot[color=colreorder,mark=square]
-  coordinates {(1,0.748)(2,0.673)(3,0.598)(4,0.525)(5,0.470)(6,0.420)};
-\addlegendentry{Reordered Context}
-\addplot[color=colecisna, mark=triangle]
-  coordinates {(1,0.818)(2,0.796)(3,0.773)(4,0.753)(5,0.740)(6,0.726)};
-\addlegendentry{ECIS (No Audit)}
-\addplot[color=colecis,   mark=diamond]
-  coordinates {(1,0.902)(2,0.886)(3,0.870)(4,0.856)(5,0.846)(6,0.838)};
-\addlegendentry{ECIS (Proposed)}
-\draw[gray,dashed] (axis cs:0.5,0.7) -- (axis cs:6.5,0.7)
-  node[right,font=\tiny,gray] {$Q{=}0.7$};
-\end{axis}
-\end{tikzpicture}
-\caption{Synthesis quality $Q$ vs.\ context length for all four methods across 500 controlled runs. Naive full-context ingestion degrades by 48.1\% from 4K to 128K tokens, while the proposed ECIS limits degradation to only 6.8\%.}
-\label{fig:scaling}
-\end{figure*}
+\includegraphics[width=0.92\linewidth]{figures/fig_position_means.pdf}
+\caption{Mean coverage, citation support and keyword correctness for each position.}
+\label{fig:means}
+\end{figure}
 
-\subsection{Positional Profile---Lost in the Middle (RQ1, RQ2)}
-
-Table~\ref{tab:position} reports positional sensitivity as evidence shifts from context boundaries to the center.
-
-\begin{table*}[t]
+\begin{figure}[t]
 \centering
-\caption{Positional Profile: Composite Quality $Q$ vs.\ Evidence Position (5 Strata)}
-\label{tab:position}
-\small
-\begin{tabular}{lrrrrrr}
-\toprule
-\textbf{Method} & \textbf{Beginning (5\%)} & \textbf{Early (25\%)} & \textbf{Middle (50\%)} & \textbf{Late (75\%)} & \textbf{End (95\%)} & \textbf{Middle Dip} \\
-\midrule
-Naive Full-Context    & 0.623 & 0.505 & 0.347 & 0.500 & 0.621 & $-44.2\%$ \\
-Reordered Context     & 0.686 & 0.674 & 0.651 & 0.670 & 0.684 & $-5.0\%$  \\
-ECIS (No Audit)       & 0.796 & 0.798 & 0.794 & 0.795 & 0.795 & $-0.2\%$  \\
-\textbf{ECIS (Proposed)} & \textbf{0.887} & \textbf{0.888} & \textbf{0.885} & \textbf{0.886} & \textbf{0.886} & $\mathbf{-0.2\%}$ \\
-\bottomrule
-\end{tabular}
-\end{table*}
+\includegraphics[width=0.92\linewidth]{figures/fig_per_item_correctness.pdf}
+\caption{Keyword correctness for each packet and position. Coverage and citation support are not shown because they are 1.00 everywhere.}
+\label{fig:peritem}
+\end{figure}
 
-The classical U-shape of the "lost in the middle effect"~\cite{r10} (Naive: -44.2) is almost completely removed by ECIS (-0.2\%), thus supporting H2. Even though the "middle effect" is lowered (-5.0\%), the length of the curve deteriorates (-36.1\%), confirming H1.
+For RQ1, citation support was 1.00 at the beginning, in the middle and at the end.
+In all 36 responses the model cited the two gold passages and never cited a distractor.
+The drop we expected in the middle condition did not occur.
 
-\begin{figure*}[t]
+For RQ2, evidence coverage was also 1.00 in every condition.
+No gold passage was left uncited in any response, so this expectation was not met either.
+
+Keyword correctness is the only measure that moved.
+It was 0.58 at the beginning, 0.50 in the middle and 0.42 at the end,
+which corresponds to 7, 6 and 5 packets out of 12 (Figure~\ref{fig:peritem}).
+Lowest performance at the end is not the lost-in-the-middle pattern,
+and the next section shows that the difference rests on very few responses.
+
+\section{Analysis of the Keyword Misses}
+\label{sec:deep}
+
+Half of the responses, 18 of 36, scored 0 on keyword correctness.
+All 18 scored 1.00 on both coverage and citation support (Figure~\ref{fig:fail}),
+so the model had found and cited the right passages in each of them.
+The 18 are spread over the positions as 5 at the beginning, 6 in the middle and 7 at the end.
+
+\begin{figure}[t]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-  width=0.92\textwidth, height=5.5cm,
-  xlabel={Relative Document Position (0 = first, 1 = last)},
-  ylabel={Position Quality Factor},
-  xmin=-0.05, xmax=1.05,
-  ymin=0.45, ymax=1.08,
-  ymajorgrids=true, grid style=dashed,
-  legend style={at={(0.98,0.35)},anchor=east,font=\small},
-  tick label style={font=\small},
-  label style={font=\small},
-  every axis plot/.append style={line width=1.4pt, mark size=3pt},
-  smooth
-]
-\addplot[color=colnaive,  mark=o]
-  coordinates {(0.00,0.980)(0.25,0.820)(0.50,0.556)(0.75,0.820)(1.00,0.980)};
-\addlegendentry{Naive Full-Context}
-\addplot[color=colreorder,mark=square]
-  coordinates {(0.00,1.000)(0.25,0.985)(0.50,0.950)(0.75,0.985)(1.00,1.000)};
-\addlegendentry{Reordered Context}
-\addplot[color=colecisna, mark=triangle]
-  coordinates {(0.00,1.000)(0.25,1.000)(0.50,0.998)(0.75,1.000)(1.00,1.000)};
-\addlegendentry{ECIS (No Audit)}
-\addplot[color=colecis,   mark=diamond]
-  coordinates {(0.00,1.000)(0.25,1.000)(0.50,0.998)(0.75,1.000)(1.00,1.000)};
-\addlegendentry{ECIS (Proposed)}
-\node[font=\scriptsize,colnaive,align=center] at (axis cs:0.50,0.49)
-  {Middle docs\\lost ($-$44.2\%)};
-\draw[->,colnaive,thin] (axis cs:0.50,0.515) -- (axis cs:0.50,0.549);
-\end{axis}
-\end{tikzpicture}
-\caption{Lost-in-the-middle positional quality factor as evidence shifts from first to last document. Naive ingestion shows the classic U-shaped curve ($-$44.2\% at centre). ECIS variants achieve a near-flat positional profile ($\Delta{=}0.2\%$), confirming positional invariance.}
-\label{fig:position}
-\end{figure*}
+\includegraphics[width=0.85\linewidth]{figures/fig_failure_tags.pdf}
+\caption{Responses flagged by the evaluation script. The flagged cases are responses with full coverage and citation support that did not contain the answer key.}
+\label{fig:fail}
+\end{figure}
 
-\subsection{Dimensional Breakdown---Ablation Study (RQ3)}
+Fifteen of the 18 come from five packets that missed the key in all three positions.
+For these packets position made no difference, and the responses point to the answer key as the cause.
+One packet asks how evidence coverage should be treated relative to fluency, and its key is ``scored separately''.
+The model answered that coverage ``must be evaluated as a separate metric from fluency'' and cited both gold passages.
+Another has the key ``shorter sleep''.
+The response reported that students sleeping ``under six hours'' had lower attention scores,
+which is the wording of the passage itself.
+The other three packets in this group follow the same pattern.
+These answers are correct by any reasonable reading, and the substring match cannot see that.
 
-Table~\ref{tab:ablation} isolates performance across the five quality dimensions from Eq.~(\ref{eq:metric}).
+The remaining three misses come from two packets, and they account for the whole difference between positions.
+The first has the key ``does not guarantee''.
+At the beginning and in the middle the model wrote that a longer window ``does not guarantee'' a more complete answer.
+At the end it wrote ``does not automatically lead to'', which carries the same meaning and scores 0.
+The second has the key ``not a complete substitute''.
+In the middle and at the end the model said plainly that the passages do not support the idea, with both passages cited,
+but only at the beginning did it happen to use the key phrase.
+The downward trend in the last column of Table~\ref{tab:means} is therefore three rephrased answers out of 36.
+With one response per cell we cannot tell whether position influenced the wording or whether this is ordinary variation,
+and we do not treat it as evidence of positional degradation.
 
-\begin{table*}[t]
-\centering
-\caption{Quality Dimensions Breakdown: Accuracy ($A$), Coverage ($C$), Provenance ($P$), Integration ($I$), Uncertainty ($U$), Composite $Q$ (All Context Lengths, Overall Mean)}
-\label{tab:ablation}
-\small
-\begin{tabular}{lrrrrrr}
-\toprule
-\textbf{Method} & \textbf{Accuracy ($A$)} & \textbf{Coverage ($C$)} & \textbf{Provenance ($P$)} & \textbf{Integration ($I$)} & \textbf{Uncertainty ($U$)} & \textbf{Composite ($Q$)} \\
-\midrule
-Naive Full-Context       & 0.567 & 0.554 & 0.551 & 0.477 & 0.450 & $0.520 \pm 0.155$ \\
-Reordered Context        & 0.738 & 0.714 & 0.663 & 0.646 & 0.606 & $0.673 \pm 0.106$ \\
-ECIS (No Audit)          & 0.873 & 0.873 & 0.917 & 0.682 & 0.634 & $0.796 \pm 0.032$ \\
-\textbf{ECIS (Proposed)} & \textbf{0.901} & \textbf{0.892} & \textbf{0.931} & \textbf{0.865} & \textbf{0.843} & $\mathbf{0.886 \pm 0.023}$ \\
-\bottomrule
-\multicolumn{7}{l}{\small\textit{Ablation: removing Steps 5 \& 9 drops $I$ by 21.2\% and $U$ by 24.8\%, while $A$ drops only 3.2\% (confirms H3).}}
-\end{tabular}
-\end{table*}
+One scoring error is worth recording because it briefly produced the result we had been expecting.
+In an earlier version of the score table the middle condition had a coverage of 0.92.
+A single middle-position response had been scored as citing nothing.
+When that response was read against its score, it turned out to cite both gold passages in bold,
+as \texttt{**P2**} and \texttt{**P7**}, a form the extractor did not yet accept.
+After the extractor was fixed and all saved responses were rescored, the middle mean returned to 1.00.
+No new model calls were made.
+An extraction error of this size would have been enough to look like a lost-in-the-middle effect with twelve packets.
 
-The results in Table~\ref{tab:ablation} demonstrate that ablating the audit module causes $I$ to decrease by 21.2\%, and $U$ to decrease by 24.8\%, whilst only causing a 3.2\% decrease in raw $A$. This verifies H3, showing that without the explicit contradiction matrix, the model automatically forces scientific debate into false consensus.
-
-\begin{figure*}[t]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-  width=0.92\textwidth, height=6cm,
-  ybar, bar width=10pt,
-  ylabel={Mean Score},
-  ymin=0, ymax=1.08,
-  xtick=data,
-  xticklabels={Accuracy ($A$), Coherence ($C$), Provenance ($P$), Integration ($I$), Uncert.\ Calib.\ ($U$)},
-  x tick label style={font=\small, align=center},
-  ymajorgrids=true, grid style=dashed,
-  legend style={at={(0.5,-0.22)},anchor=north,legend columns=4,font=\small},
-  label style={font=\small},
-  enlarge x limits=0.12,
-  nodes near coords,
-  nodes near coords style={font=\tiny, rotate=90, anchor=west},
-  every node near coord/.append style={/pgf/number format/.cd, fixed, precision=3}
-]
-\addplot[fill=colnaive,  draw=colnaive!80!black]
-  coordinates {(1,0.567)(2,0.554)(3,0.551)(4,0.477)(5,0.450)};
-\addlegendentry{Naive Full-Context}
-\addplot[fill=colreorder,draw=colreorder!80!black]
-  coordinates {(1,0.738)(2,0.714)(3,0.663)(4,0.646)(5,0.606)};
-\addlegendentry{Reordered Context}
-\addplot[fill=colecisna, draw=colecisna!80!black]
-  coordinates {(1,0.873)(2,0.873)(3,0.917)(4,0.682)(5,0.634)};
-\addlegendentry{ECIS (No Audit)}
-\addplot[fill=colecis,   draw=colecis!80!black]
-  coordinates {(1,0.901)(2,0.892)(3,0.931)(4,0.865)(5,0.843)};
-\addlegendentry{ECIS (Proposed)}
-\end{axis}
-\end{tikzpicture}
-\caption{Per-dimension quality breakdown across all four methods. Removing the contradiction and provenance audit steps (ECIS No Audit) causes a 21.2\% collapse in cross-source integration ($I$) and a 24.8\% drop in uncertainty calibration ($U$), while accuracy ($A$) is barely affected ($-$3.2\%).}
-\label{fig:ablation}
-\end{figure*}
-
-% -------------------------------------------------------
 \section{Discussion}
+\label{sec:discussion}
 
-\subsection{Length vs.\ Position Are Independent Failure Modes}
+The most likely explanation for the null result is that the task was too easy.
+A prompt of about 170 words with seven passages is tiny next to the inputs for which position effects have been reported.
+The average English input in LongBench is 6,711 words \citep{bai2024longbench},
+and RULER reports its drops as inputs lengthen \citep{hsieh2024ruler}.
+Our distractors also made the gold passages easy to spot.
+A sentence about a recycling drive does not compete with a sentence about sleep and attention when the question is about sleep.
+Under those conditions both primary measures sat at their ceiling, and a measure at its ceiling cannot show a difference between conditions.
 
-Tables~\ref{tab:scale} and~\ref{tab:position} jointly confirm that positional attenuation and length-induced degradation are \textbf{distinct and independently operating mechanisms} (see also Figs.~\ref{fig:scaling} and~\ref{fig:position}). Reordering~\cite{r7} flattens the positional U-curve (from $-$44.2\% to $-$5.0\%), consistent with Liu et al.~\cite{r10}. However, as context expands to 32K tokens, Reordered Context degrades by 36.1\%, consistent with Du et al.~\cite{r4}. Reordering optimizes the positional component of $w(p_i, L, C)$ in Eq.~(\ref{eq:weighting}) but leaves the length-scaling component fully active.
+The result should be read with that in mind.
+It shows that this model, with this prompt, cites two clearly relevant passages among five irrelevant ones wherever they are placed.
+It does not show that position is irrelevant to citation behaviour in general,
+and it is consistent with the earlier findings if position effects only appear once the context is long or the distractors are plausible.
+Our data cannot distinguish between those possibilities because we varied neither length nor distractor difficulty.
 
-\subsection{ECIS Decouples Reasoning from Context Length}
+There is also a lesson here about measurement.
+Two scoring artefacts in this small study could have been mistaken for a position effect.
+One was the bold-citation error, and the other was the keyword score falling across positions.
+Both went away or lost their meaning once the raw responses were read.
+For a small evaluation like this one, reading every response was feasible, and it changed the conclusion.
 
-The chunk-level tuple extraction performed in ECIS makes the location information of the evidence in the corpus irrelevant. This is supported by the low positional information in all 5 strata ($\Delta{=}0.2\%$). The small amount of remaining performance degradation at 32K tokens (6.8\%) is a result of compounding small amounts of noise introduced during the chunk extraction process. This is not caused by attention collapse or positional information loss.
+\section{Limitations}
+\label{sec:limits}
 
-\subsection{The Audit Module Is Critical for Scholarly Synthesis}
+The study is small.
+There are twelve packets, one model, one prompt template and one response per condition,
+so there are no confidence intervals and no significance tests, and none would be meaningful at this size.
+The packets are synthetic and short, so the findings do not transfer to real papers or to long inputs.
 
-The main result here is that obtained by ablating (Table~\ref{tab:ablation}). Visualised in Fig.~\ref{fig:ablation}, we can see that removing Steps 5 and 9 leads to fluent, well informed text (A{=}0.873). However,
-\begin{itemize}
- \item \textbf{ Cross-Source Integration $I$ is reduced by 21.2\%:}. When there is no explicit contradiction matrix, the model will combine contradictory evidence to create false consensus. Contradictory effect sizes are combined into a unified story.
-\item \textbf{ Uncertainty calibration $U$ is reduced by 24.8\%:}. Methodological issues such as population limitation, negative results and boundary conditions are omitted.
-\end{itemize}
-This confirms the claim made in the review paper that \textit{compression is not information-neutral}~\cite{r4}. However, this collapse represents a problem with epistemic risk in high-stakes domains like medical evidence synthesis, legal review, and policy analysis.
-\subsection{Limitations}
+The two primary measures check which passage ids were cited.
+They do not check whether the sentence carrying the citation is actually supported by the passage.
+A response could cite the right passages and still misstate them, and our scores would not detect it.
+Keyword correctness is weaker still, as Section~\ref{sec:deep} shows.
+In hindsight a short human rubric would have been a better secondary measure.
 
-(1) For computational efficiency, we evaluated using public benchmark distributions from ~\cite{r4,r10} rather than running the full closed loop with our large (70B+) parameter models.
-(2) We evaluate on tasks which use empirical CS/NLP preprints. Contradictions may be more/less common depending on the nature of the qualitative research in different disciplines.
-(3) There are potential issues with error propagation in step 3 caused by upstream extraction issues. These are somewhat reduced when resolving gaps in step 8.
+Finally, the model is hosted by a third party.
+Temperature 0 reduces variation but does not guarantee identical outputs on a rerun,
+and the provider can change or withdraw the model.
+The saved responses are the record of what was observed.
 
-% -------------------------------------------------------
 \section{Conclusion}
+\label{sec:concl}
 
-We demonstrate that increasing context length does not help obtain reliable academic summaries. We show that there are two distinct problems causing quality degradation (positional bias that can be addressed by reordering and length bias which requires changes to the architecture). By addressing these issues we propose the ECIS which allows us to have a positional bias of Δ=0.2\% and a close to zero length bias (-6.8\%). This outperforms all baselines with Q=0.886±0.023.
+We tested whether moving gold passages to the middle of a short multi-passage prompt lowers citation support or evidence coverage.
+It did not.
+Both were 1.00 at the beginning, in the middle and at the end for all twelve packets.
+The keyword correctness score varied, but the variation came from answers that were phrased differently from the key while citing the right passages.
+We conclude that this setup was too easy to reveal a position effect if one exists.
+The next step is to make it harder by using longer contexts, more distractors, and distractors on the same topic as the gold passages,
+and to replace keyword matching with human judgement of answer and citation quality.
 
-The ablation study shows that the contradiction detection and provenance auditing component is required so that scientific debate is maintained. If we remove this step then we get fluent but misleading syntheses where contradictions are avoided.
+\section*{Reproducibility and use of AI tools}
 
-Future work should focus on creating systems for scholarly synthesis that can process information in a structured way. This could include using open-weight reasoning models as local chunk extractors, varying chunk sizes based on the number of citations or testing ECIS on biomedical trial corpora.
-% -------------------------------------------------------
-\begin{thebibliography}{16}
+{\sloppy
+The code, configuration, packets, saved model responses, score tables and figure scripts are in the project folder
+\texttt{AITR\_Lab02\_MHM2026001\_ContextWindowDegradation}.
+The results in this paper come from the run directory \texttt{run\_20261030T142328Z}.
+The API key is read from a local \texttt{.env} file that is not part of the repository.
+\par}
 
-\bibitem{r1}
-Y.~Bai, X.~Lv, J.~Zhang, H.~Lyu, J.~Tang, Z.~Huang, Z.~Du, X.~Liu, A.~Zeng, L.~Hou, Y.~Dong, J.~Tang, and J.~Li,
-``LongBench: A bilingual, multitask benchmark for long context understanding,''
-in \textit{Proc. 62nd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, vol.~1, 2024, pp.~3110--3132.
-DOI: 10.18653/v1/2024.acl-long.172. arXiv:2308.14508.
+An AI coding assistant was used during this project for scaffolding the code, drafting the synthetic packets,
+writing the analysis scripts, and drafting and editing this manuscript.
+The numbers reported here are computed from the saved model responses.
+Which tasks were AI-assisted, and how each was checked, is recorded in \texttt{ai\_assistance\_log.md} and \texttt{ai\_provenance\_report.md} in the project folder.
 
-\bibitem{r2}
-T.~Dao, D.~Y.~Fu, S.~Ermon, A.~Rudra, and C.~R\'{e},
-``FlashAttention: Fast and memory-efficient exact attention with IO-awareness,''
-in \textit{Adv. Neural Inf. Process. Syst. (NeurIPS~35)}, 2022.
-arXiv:2205.14135.
-
-\bibitem{r3}
-Y.~Ding, L.~L.~Zhang, C.~Zhang, Y.~Xu, N.~Shang, J.~Xu, F.~Yang, and M.~Yang,
-``LongRoPE: Extending LLM context window beyond 2 million tokens,''
-\textit{arXiv preprint arXiv:2402.13753}, 2024.
-
-\bibitem{r4}
-Y.~Du \textit{et al.},
-``Context length alone hurts LLM performance despite perfect retrieval,''
-in \textit{Findings Assoc. Comput. Linguist.: EMNLP 2025}, 2025.
-DOI: 10.18653/v1/2025.findings-emnlp.1264.
-
-\bibitem{r5}
-M.~Guo, J.~Ainslie, D.~Uthus, S.~Onta\~{n}\'{o}n, J.~Ni, Y.-H.~Sung, and Y.~Yang,
-``LongT5: Efficient text-to-text Transformer for long sequences,''
-in \textit{Findings Assoc. Comput. Linguist.: NAACL 2022}, 2022, pp.~7242--7256.
-arXiv:2112.07916.
-
-\bibitem{r6}
-J.~He, K.~Pan, X.~Dong, Z.~Song, Y.~Liu, Q.~Sun, Y.~Liang, H.~Wang, E.~Zhang, and J.~Zhang,
-``Never lost in the middle: Mastering long-context question answering with position-agnostic decompositional training,''
-in \textit{Proc. 62nd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, 2024.
-DOI: 10.18653/v1/2024.acl-long.736.
-
-\bibitem{r7}
-H.~Jiang, Q.~Wu, X.~Luo, D.~Li, C.-Y.~Lin, Y.~Yang, and L.~Qiu,
-``LongLLMLingua: Accelerating and enhancing LLMs in long context scenarios via prompt compression,''
-in \textit{Proc. 62nd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, vol.~1, 2024, pp.~1658--1677.
-DOI: 10.18653/v1/2024.acl-long.91.
-
-\bibitem{r8}
-P.~Lewis, E.~Perez, A.~Piktus, F.~Petroni, V.~Karpukhin, N.~Goyal, H.~K\"{u}ttler, M.~Lewis, W.-t.~Yih, T.~Rockt\"{a}schel, S.~Riedel, and D.~Kiela,
-``Retrieval-augmented generation for knowledge-intensive NLP tasks,''
-in \textit{Adv. Neural Inf. Process. Syst. (NeurIPS~33)}, 2020, pp.~9459--9474.
-arXiv:2005.11401.
-
-\bibitem{r9}
-J.~Li, M.~Wang, Z.~Zheng, and M.~Zhang,
-``LooGLE: Can long-context language models understand long contexts?''
-in \textit{Proc. 62nd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, vol.~1, 2024, pp.~16304--16333.
-DOI: 10.18653/v1/2024.acl-long.859.
-
-\bibitem{r10}
-N.~F.~Liu, K.~Lin, J.~Hewitt, A.~Paranjape, M.~Bevilacqua, F.~Petroni, and P.~Liang,
-``Lost in the middle: How language models use long contexts,''
-\textit{Trans. Assoc. Comput. Linguist.}, vol.~12, pp.~157--173, 2024.
-DOI: 10.1162/tacl\_a\_00638. arXiv:2307.03172.
-
-\bibitem{r11}
-N.~Shang, L.~L.~Zhang, S.~Wang, G.~Zhang, G.~Lopez, F.~Yang, W.~Chen, and M.~Yang,
-``LongRoPE2: Near-lossless LLM context window scaling,''
-\textit{arXiv preprint arXiv:2502.20082}, 2025.
-
-\bibitem{r12}
-A.~Vaswani, N.~Shazeer, N.~Parmar, J.~Uszkoreit, L.~Jones, A.~N.~Gomez, \L.~Kaiser, and I.~Polosukhin,
-``Attention is all you need,''
-in \textit{Adv. Neural Inf. Process. Syst. (NeurIPS~30)}, 2017.
-arXiv:1706.03762.
-
-\bibitem{r13}
-W.~Wang, L.~Dong, H.~Cheng, X.~Liu, X.~Yan, J.~Gao, and F.~Wei,
-``Augmenting language models with long-term memory,''
-\textit{arXiv preprint arXiv:2306.07174}, 2023.
-
-\bibitem{r14}
-C.~Wu and Y.~Song,
-``Scaling context, not parameters: Training a compact 7B language model for efficient long-context processing,''
-in \textit{Proc. 63rd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, vol.~6 (Industry Track), 2025, pp.~61--68.
-DOI: 10.18653/v1/2025.acl-industry.6.
-
-\bibitem{r15}
-J.~Tian, D.~Zheng, Y.~Chen, R.~Wang, C.~Zhang, and D.~Zhang,
-``Untie the knots: An efficient data augmentation strategy for long-context pre-training in language models,''
-in \textit{Proc. 63rd Annu. Meet. Assoc. Comput. Linguist. (ACL)}, vol.~1, 2025, pp.~1223--1242.
-DOI: 10.18653/v1/2025.acl-long.62.
-
-\bibitem{r16}
-J.-C.~Gu, J.~Zhang, D.~Wu, Y.~Li, K.-W.~Chang, and N.~Peng,
-``BRIEF-Pro: Universal context compression with short-to-long synthesis for fast and accurate multi-hop reasoning,''
-in \textit{Findings Assoc. Comput. Linguist.: ACL 2026}, 2026.
-ACL Anthology: 2026.findings-acl.696.
-
-\end{thebibliography}
+\bibliographystyle{plainnat}
+\bibliography{references}
 
 \end{document}
